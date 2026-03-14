@@ -1,6 +1,8 @@
 function runNewsBot() {
+  const startTime = new Date();
   Logger.log("START");
 
+  // ── 1. 収集・絞り込み ──────────────────────────────────
   const articles = collectArticles();
   const articlesCollected = articles.length;
 
@@ -9,41 +11,77 @@ function runNewsBot() {
   const newArticles = removeDuplicates(ranked);
 
   if (newArticles.length === 0) {
-    Logger.log("new article none");
+    Logger.log("新しい記事なし");
     updateDashboard(articlesCollected, 0, 0, 0, 0);
     return;
   }
 
-  const threadName = `📡 ${Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd")} 技術ニュース`;
-
-  let postedCount = 0;
-  let threadId = null; // 最初の投稿でスレッドを作成し、ID を使い回す
+  // ── 2. AI 要約・記事分類 ───────────────────────────────
+  const priorityArticles = [];
+  const regularArticles  = [];
 
   newArticles.slice(0, CONFIG.MAX_ARTICLES).forEach(article => {
-    // AI 要約
     const summaryData = aiSummary(article);
-    article.summary = summaryData.summary;
-    article.summary_points = summaryData.points; // 配列
-    article.comment = summaryData.comment;
-    article.trend_score = summaryData.trend;
+    article.summary        = summaryData.summary;
+    article.summary_points = summaryData.points;
+    article.comment        = summaryData.comment;
+    article.trend_score    = summaryData.trend;
 
-    // キーワード抽出
     const text = (article.title + " " + article.content).toLowerCase();
     article.keywords = CONFIG.KEYWORDS.filter(k => text.includes(k));
-
     article.ai_score = article.score || 0;
-    article.source = article.source || "RSS";
+    article.source   = article.source || "RSS";
 
-    // Discord 投稿（threadId が null なら新規スレッド作成、以降は既存スレッドに追記）
-    threadId = postDiscord(article, threadName, threadId);
+    // キーワードが複数ヒット → 高関連度
+    article.isHighRelevance = article.keywords.length >= 2;
 
+    if (article.isHighRelevance) {
+      priorityArticles.push(article);
+    } else {
+      regularArticles.push(article);
+    }
+
+    Utilities.sleep(800);
+  });
+
+  const allArticles = [...priorityArticles, ...regularArticles];
+
+  // ── 3. Discord スレッド作成（1本だけ）──────────────────
+  const today      = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd");
+  const threadName = `📡 ${today} 技術ニュース`;
+  const headerText =
+    `📢 **${today} の技術記事まとめ**\n\n` +
+    `本日の注目記事をお届けします（${allArticles.length} 件）`;
+
+  const threadId = createDiscordThread(threadName, headerText);
+
+  if (!threadId) {
+    logError("スレッド作成失敗", "threadId が取得できませんでした");
+    Logger.log("スレッド作成失敗のため処理を中断");
+    return;
+  }
+
+  // ── 4. 記事を順番に投稿 ───────────────────────────────
+  let postedCount = 0;
+
+  allArticles.forEach(article => {
+    postArticleToThread(article, threadId);
     saveArticle(article);
     markAsPosted(article);
     postedCount++;
-
     Utilities.sleep(1200);
   });
 
+  // ── 5. レポート投稿 ───────────────────────────────────
+  const executionTime = ((new Date() - startTime) / 1000).toFixed(1);
+  postReportToThread({
+    collected:     articlesCollected,
+    filtered:      newArticles.length,
+    posted:        postedCount,
+    highRelevance: priorityArticles.length,
+    executionTime: executionTime,
+  }, threadId);
+
   updateDashboard(articlesCollected, postedCount);
-  Logger.log("END");
+  Logger.log(`END: ${postedCount} 件投稿 / ${executionTime} 秒`);
 }

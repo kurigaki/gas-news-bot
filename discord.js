@@ -1,72 +1,108 @@
 /**
- * 記事を Discord のフォーラムチャンネルに投稿する。
+ * Discord フォーラムチャンネルにスレッドを新規作成し、スレッド ID を返す。
+ * Google Chat の createNewThread() 相当。
  *
- * - threadId が null のとき → thread_name を付けて新規スレッドを作成し、
- *   レスポンスから thread_id を返す。
- * - threadId が渡されたとき → ?thread_id=... クエリで既存スレッドに追記する。
+ * Discord フォーラム Webhook では最初の POST が「スレッドの作成 + 最初のメッセージ」を
+ * 兼ねるため、ヘッダーメッセージをここで送信する。
  *
- * @param {Object} article    投稿する記事オブジェクト
- * @param {string} threadName スレッド名（新規作成時のみ使用）
- * @param {string|null} threadId 既存スレッド ID（null なら新規作成）
- * @returns {string|null} 作成 / 使用したスレッド ID
+ * @param {string} threadName  フォーラムに表示されるスレッドタイトル
+ * @param {string} headerText  スレッド内の最初のメッセージ本文
+ * @returns {string|null}  作成されたスレッドの channel_id、失敗時は null
  */
-function postDiscord(article, threadName, threadId = null) {
-  const webhook = CONFIG.WEBHOOK;
+function createDiscordThread(threadName, headerText) {
+  const payload = {
+    thread_name: threadName,
+    content: headerText,
+  };
 
-  // ポイントを配列 → 箇条書きに変換
+  const res = UrlFetchApp.fetch(CONFIG.WEBHOOK, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+
+  if (res.getResponseCode() >= 400) {
+    logError("Discord createThread ERROR", res.getContentText());
+    return null;
+  }
+
+  try {
+    const json = JSON.parse(res.getContentText());
+    // Discord はメッセージレスポンスの channel_id にスレッド ID を返す
+    const threadId = json.channel_id || null;
+    Logger.log("Discord スレッド作成成功: " + threadId);
+    return threadId;
+  } catch (e) {
+    logError("Discord thread_id parse ERROR", e.message);
+    return null;
+  }
+}
+
+/**
+ * 既存スレッドに記事を embed で投稿する。
+ * Google Chat の sendToChat() / sendHighRelevanceToChat() 相当。
+ *
+ * @param {Object} article   投稿する記事オブジェクト
+ * @param {string} threadId  投稿先スレッドの channel_id
+ */
+function postArticleToThread(article, threadId) {
   const pointsText = Array.isArray(article.summary_points)
     ? article.summary_points.map(p => `・${p}`).join("\n")
     : (article.summary_points || "要点なし");
 
+  const isHighRelevance = article.isHighRelevance || false;
+
   const embed = {
-    title: article.title,
+    title: (isHighRelevance ? "🔥 " : "📰 ") + article.title,
     url: article.url,
     description:
       `**【要点】**\n${pointsText}\n\n` +
       `**【要約】**\n${article.summary || ""}\n\n` +
       (article.comment ? `**【コメント】**\n${article.comment}` : ""),
+    color: isHighRelevance ? 0xff4500 : 0x5865f2,
     fields: [
       { name: "Score", value: String(article.score || 0), inline: true },
       { name: "Source", value: article.source || "RSS", inline: true },
     ],
-    color: 0x5865f2, // Blurple
   };
 
-  const payload = { embeds: [embed] };
-
-  // 新規スレッド作成時は thread_name を付与
-  if (!threadId) {
-    payload.thread_name = threadName;
-  }
-
-  // 既存スレッドへの追記は ?thread_id= クエリを使う
-  const url = threadId ? `${webhook}?thread_id=${threadId}` : webhook;
-
-  const options = {
+  const res = UrlFetchApp.fetch(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
     method: "post",
     contentType: "application/json",
-    payload: JSON.stringify(payload),
+    payload: JSON.stringify({ embeds: [embed] }),
     muteHttpExceptions: true,
-  };
+  });
 
-  const res = UrlFetchApp.fetch(url, options);
-  const code = res.getResponseCode();
-
-  if (code >= 400) {
-    logError("Discord POST ERROR", res.getContentText());
-    return threadId;
+  if (res.getResponseCode() >= 400) {
+    logError("Discord postArticle ERROR", res.getContentText());
   }
+}
 
-  // 新規スレッド作成時はレスポンスから thread_id を取得して返す
-  if (!threadId) {
-    try {
-      const json = JSON.parse(res.getContentText());
-      return json.channel_id || json.id || null;
-    } catch (e) {
-      logError("Discord thread_id parse ERROR", e.message);
-      return null;
-    }
+/**
+ * 実行レポートをスレッドに投稿する。
+ * Google Chat の sendReportToChat() 相当。
+ *
+ * @param {Object} stats    統計オブジェクト
+ * @param {string} threadId 投稿先スレッドの channel_id
+ */
+function postReportToThread(stats, threadId) {
+  const lines = [
+    "📊 **実行レポート**",
+    "",
+    `🔍 収集: ${stats.collected} 件 → フィルタ後: ${stats.filtered} 件 → 投稿: ${stats.posted} 件`,
+    `🔥 高関連度: ${stats.highRelevance} 件 / 通常: ${stats.posted - stats.highRelevance} 件`,
+    `⏱️ 実行時間: ${stats.executionTime} 秒`,
+  ];
+
+  const res = UrlFetchApp.fetch(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ content: lines.join("\n") }),
+    muteHttpExceptions: true,
+  });
+
+  if (res.getResponseCode() >= 400) {
+    logError("Discord postReport ERROR", res.getContentText());
   }
-
-  return threadId;
 }
