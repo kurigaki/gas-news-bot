@@ -13,6 +13,7 @@ function runNewsBot() {
   if (newArticles.length === 0) {
     Logger.log("新しい記事なし");
     updateDashboard(articlesCollected, 0, 0, 0, 0);
+    logInfo("実行完了", `収集: ${articlesCollected} 件 / 投稿対象なし`);
     return;
   }
 
@@ -82,6 +83,7 @@ function runNewsBot() {
     executionTime: executionTime,
   }, threadId);
 
-  updateDashboard(articlesCollected, postedCount);
+  updateDashboard(articlesCollected, postedCount, priorityArticles.length, regularArticles.length, 0);
+  logInfo("実行完了", `収集: ${articlesCollected} 件 / 投稿: ${postedCount} 件 / ${executionTime} 秒`);
   Logger.log(`END: ${postedCount} 件投稿 / ${executionTime} 秒`);
 }
