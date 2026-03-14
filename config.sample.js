@@ -1,5 +1,0 @@
-const CONFIG = {
-  WEBHOOK: "",
-  OPENROUTER: "",
-  MAX_ARTICLES: 10
-};
