@@ -22,18 +22,37 @@ function parseFeed(xml, feedUrl) {
     const doc = XmlService.parse(fixed);
     return parseByXmlService(doc, feedUrl);
   } catch (e) {
-    logError("XML PARSE FALLBACK: " + feedUrl, e.message);
+    logWarn("XML PARSE FALLBACK: " + feedUrl, e.message);
     return parseByRegex(xml, feedUrl);
   }
 }
 
 /**
  * 不正な XML を修正する前処理。
- * RSS 2.0 の <link> が閉じタグなしで使われているケースを補完する。
+ *
+ * 1. <link>URL の閉じタグなしを補完
+ * 2. description / summary / content タグ内の生 HTML を CDATA でラップ
+ *    → <br> <img> など閉じタグなし HTML 要素が XML パースを壊すのを防ぐ
  */
 function fixMalformedXml(xml) {
-  // <link>URL（改行または別タグが続く）→ <link>URL</link> に補完
-  return xml.replace(/<link>(https?:\/\/[^\s<]+)(?=\s*[\r\n<])/g, "<link>$1</link>");
+  // 1. <link>URL の閉じタグなしを補完
+  let fixed = xml.replace(/<link>(https?:\/\/[^\s<]+)(?=\s*[\r\n<])/g, "<link>$1</link>");
+
+  // 2. description / summary / content の中身に HTML タグが含まれる場合は CDATA でラップ
+  fixed = fixed.replace(
+    /<(description|summary|content)([^>]*)>([\s\S]*?)<\/\1>/g,
+    (match, tag, attrs, content) => {
+      // すでに CDATA 済みならスキップ
+      if (content.indexOf("<![CDATA[") !== -1) return match;
+      // HTML タグを含む場合のみラップ
+      if (/<[a-zA-Z\/!]/.test(content)) {
+        return `<${tag}${attrs}><![CDATA[${content}]]></${tag}>`;
+      }
+      return match;
+    }
+  );
+
+  return fixed;
 }
 
 /** XmlService を使って Atom / RSS 両形式をパース */
