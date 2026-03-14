@@ -35,8 +35,9 @@ function parseFeed(xml, feedUrl) {
  *    → <br> <img> など閉じタグなし HTML 要素が XML パースを壊すのを防ぐ
  */
 function fixMalformedXml(xml) {
-  // 1. <link>URL の閉じタグなしを補完
-  let fixed = xml.replace(/<link>(https?:\/\/[^\s<]+)(?=\s*[\r\n<])/g, "<link>$1</link>");
+  // 1. <link>URL の閉じタグが"ない"場合のみ </link> を補完
+  //    (?!\s*<\/link>) で直後に </link> が来る場合はスキップ（二重補完を防ぐ）
+  let fixed = xml.replace(/<link>(https?:\/\/[^\s<]+)(?!\s*<\/link>)/g, "<link>$1</link>");
 
   // 2. description / summary / content の中身に HTML タグが含まれる場合は CDATA でラップ
   fixed = fixed.replace(
