@@ -10,12 +10,17 @@
  * @returns {string|null}  作成されたスレッドの channel_id、失敗時は null
  */
 function createDiscordThread(threadName, headerText) {
+  if (!CONFIG.WEBHOOK) {
+    throw new Error("CONFIG.WEBHOOK が未設定です。config.js に Discord Webhook URL を設定してください。");
+  }
+
   const payload = {
     thread_name: threadName,
     content: headerText,
   };
 
-  const res = UrlFetchApp.fetch(CONFIG.WEBHOOK, {
+  // ?wait=true を付けないと Discord は 204 No Content を返し channel_id が取得できない
+  const res = UrlFetchApp.fetch(CONFIG.WEBHOOK + "?wait=true", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify(payload),
@@ -31,7 +36,7 @@ function createDiscordThread(threadName, headerText) {
     const json = JSON.parse(res.getContentText());
     // Discord はメッセージレスポンスの channel_id にスレッド ID を返す
     const threadId = json.channel_id || null;
-    Logger.log("Discord スレッド作成成功: " + threadId);
+    Logger.log("Discord スレッド作成成功: threadId=" + threadId);
     return threadId;
   } catch (e) {
     logError("Discord thread_id parse ERROR", e.message);
