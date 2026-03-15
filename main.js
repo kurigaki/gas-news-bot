@@ -174,9 +174,9 @@ function runNewsBot() {
 
   // ── 3. Discord スレッド作成（1本だけ）──────────────────
   const today      = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd");
-  const threadName = `📡 ${today} 技術ニュース`;
+  const threadName = `${today} ${CONFIG.BOT_THREAD_LABEL}`;
   const headerText =
-    `📢 **${today} の技術記事まとめ**\n\n` +
+    `📢 **${today} の${CONFIG.BOT_HEADER_LABEL}**\n\n` +
     `本日の注目記事をお届けします（${allArticles.length} 件）`;
 
   const threadId = createDiscordThread(threadName, headerText);

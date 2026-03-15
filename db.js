@@ -82,9 +82,12 @@ function loadBotConfig(botId) {
   // BOTS から Webhook を CONFIG に設定
   const botDef = BOTS[botId];
   if (!botDef) throw new Error(`未定義の Bot ID: ${botId}`);
-  CONFIG.WEBHOOK       = botDef.WEBHOOK;
-  CONFIG.ALERT_WEBHOOK = botDef.ALERT_WEBHOOK;
-  CONFIG.MAX_ARTICLES  = 10; // 毎回デフォルトにリセットしてからシート値で上書き
+  CONFIG.WEBHOOK           = botDef.WEBHOOK;
+  CONFIG.ALERT_WEBHOOK     = botDef.ALERT_WEBHOOK;
+  CONFIG.BOT_THREAD_LABEL  = botDef.threadLabel || botDef.label;
+  CONFIG.BOT_HEADER_LABEL  = botDef.headerLabel || botDef.label;
+  CONFIG.MAX_ARTICLES      = 10;    // 毎回デフォルトにリセットしてからシート値で上書き
+  CONFIG.REQUIRE_KEYWORD   = false; // 毎回デフォルトにリセット
 
   // config シートは共有シートのため直接取得（getSheet はプレフィックスを付けるため使わない）
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -104,7 +107,8 @@ function loadBotConfig(botId) {
       case "RSS_FEED":      feeds.push(v);                                               break;
       case "KEYWORD":       keywords.push(v.toLowerCase());                              break;
       case "KEYWORD_BLOCK": keywordsBlock.push(v.toLowerCase());                         break;
-      case "MAX_ARTICLES":  CONFIG.MAX_ARTICLES = parseInt(v, 10) || CONFIG.MAX_ARTICLES; break;
+      case "MAX_ARTICLES":    CONFIG.MAX_ARTICLES  = parseInt(v, 10) || CONFIG.MAX_ARTICLES; break;
+      case "REQUIRE_KEYWORD": CONFIG.REQUIRE_KEYWORD = (v.toLowerCase() === "true");         break;
     }
   });
 
