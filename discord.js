@@ -67,10 +67,19 @@ function postArticleToThread(article, threadId) {
       (article.comment ? `**【コメント】**\n${article.comment}` : ""),
     color: isHighRelevance ? 0xff4500 : 0x5865f2,
     fields: [
-      { name: "Score", value: String(article.score || 0), inline: true },
-      { name: "Source", value: article.source || "RSS", inline: true },
+      { name: "Score",  value: String(article.score || 0),                         inline: true },
+      { name: "Source", value: article.source || "RSS",                             inline: true },
+      { name: "読了時間", value: `約 ${Math.ceil((article.content || "").length / 500)} 分`, inline: true },
     ],
   };
+
+  // 公開日が取得できている場合は timestamp に設定
+  if (article.pubDate) {
+    try {
+      const d = new Date(article.pubDate);
+      if (!isNaN(d.getTime())) embed.timestamp = d.toISOString();
+    } catch (_) {}
+  }
 
   const res = UrlFetchApp.fetch(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
     method: "post",

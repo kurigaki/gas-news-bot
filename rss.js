@@ -1,14 +1,31 @@
 function collectArticles() {
   let list = [];
+  const stats = []; // フィード別の取得結果
+
   CONFIG.RSS_FEEDS.forEach(feedUrl => {
     try {
       const xml = UrlFetchApp.fetch(feedUrl, { muteHttpExceptions: true }).getContentText();
       const articles = parseFeed(xml, feedUrl);
       list = list.concat(articles);
+      stats.push({ url: feedUrl, count: articles.length, ok: true });
     } catch (e) {
       logError("RSS FETCH ERROR: " + feedUrl, e.message);
+      stats.push({ url: feedUrl, count: 0, ok: false, error: e.message });
     }
   });
+
+  // フィード別取得件数をログに記録（B）
+  const summary = stats.map(s => {
+    const host = s.url.replace(/^https?:\/\//, "").split("/")[0];
+    return s.ok ? `${host}:${s.count}件` : `${host}:失敗`;
+  }).join(", ");
+  logInfo("フィード取得完了", summary);
+
+  const failedFeeds = stats.filter(s => !s.ok);
+  if (failedFeeds.length > 0) {
+    logWarn("取得失敗フィードあり", failedFeeds.map(s => s.url).join(", "));
+  }
+
   return list;
 }
 
@@ -88,8 +105,15 @@ function parseByXmlService(doc, feedUrl) {
       e.getChildText("description") ||
       "";
 
+    // 公開日: Atom は <updated>/<published>, RSS 2.0 は <pubDate>
+    const pubDateStr =
+      e.getChildText("published", ns) ||
+      e.getChildText("updated", ns) ||
+      e.getChildText("pubDate") ||
+      "";
+
     if (!title || !link) return;
-    list.push({ title: title.trim(), url: link.trim(), content: desc, source: feedUrl });
+    list.push({ title: title.trim(), url: link.trim(), content: desc, source: feedUrl, pubDate: pubDateStr });
   });
 
   return list;
@@ -113,12 +137,15 @@ function parseByRegex(xml, feedUrl) {
     const descMatch =
       inner.match(/<(?:content|summary|description)[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:content|summary|description)>/);
 
-    const title = titleMatch ? titleMatch[1].trim() : "";
-    const link = linkMatch ? linkMatch[1].trim() : "";
-    const desc = descMatch ? descMatch[1].trim() : "";
+    const pubDateMatch = inner.match(/<(?:pubDate|published|updated)[^>]*>([^<]+)<\/(?:pubDate|published|updated)>/);
+
+    const title   = titleMatch   ? titleMatch[1].trim()   : "";
+    const link    = linkMatch    ? linkMatch[1].trim()     : "";
+    const desc    = descMatch    ? descMatch[1].trim()     : "";
+    const pubDate = pubDateMatch ? pubDateMatch[1].trim()  : "";
 
     if (!title || !link) continue;
-    list.push({ title, url: link, content: desc, source: feedUrl });
+    list.push({ title, url: link, content: desc, source: feedUrl, pubDate });
   }
 
   return list;

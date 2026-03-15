@@ -64,6 +64,67 @@ function cleanupOldData(retentionDays = 30) {
 }
 
 /**
+ * config シートの設定を読み込んで CONFIG オブジェクトに上書きする。
+ * runNewsBot() の先頭で呼び出す。
+ *
+ * シートのフォーマット（key 列 / value 列）:
+ *   RSS_FEED      | https://...    （複数行で複数フィード）
+ *   KEYWORD       | llm            （複数行で複数キーワード）
+ *   KEYWORD_BLOCK | pr記事         （複数行でブロックキーワード）
+ *   MAX_ARTICLES  | 10
+ */
+function loadSheetConfig() {
+  const sheet = getSheet("config");
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return; // ヘッダーのみ、設定なし
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  const feeds = [];
+  const keywords = [];
+  const keywordsBlock = [];
+
+  rows.forEach(([key, value]) => {
+    if (!key || value === "") return;
+    const k = String(key).trim().toUpperCase();
+    const v = String(value).trim();
+    switch (k) {
+      case "RSS_FEED":      feeds.push(v);                                           break;
+      case "KEYWORD":       keywords.push(v.toLowerCase());                          break;
+      case "KEYWORD_BLOCK": keywordsBlock.push(v.toLowerCase());                     break;
+      case "MAX_ARTICLES":  CONFIG.MAX_ARTICLES = parseInt(v, 10) || CONFIG.MAX_ARTICLES; break;
+    }
+  });
+
+  if (feeds.length > 0)         CONFIG.RSS_FEEDS       = feeds;
+  if (keywords.length > 0)      CONFIG.KEYWORDS        = keywords;
+  if (keywordsBlock.length > 0) CONFIG.KEYWORDS_BLOCK  = keywordsBlock;
+}
+
+/**
+ * config シートを現在の CONFIG 値で初期化する。
+ * 初回セットアップ時に一度だけ手動で実行すること。
+ * 既存の設定行はすべて削除してから書き直す。
+ */
+function setupConfigSheet() {
+  const sheet = getSheet("config");
+  // ヘッダー行を残して既存データを削除
+  if (sheet.getLastRow() > 1) {
+    sheet.deleteRows(2, sheet.getLastRow() - 1);
+  }
+
+  const rows = [];
+  CONFIG.RSS_FEEDS.forEach(url  => rows.push(["RSS_FEED",      url,  "RSSフィードURL（1行1フィード）"]));
+  CONFIG.KEYWORDS.forEach(kw    => rows.push(["KEYWORD",        kw,   "フィルタキーワード（1行1件）"]));
+  (CONFIG.KEYWORDS_BLOCK || []).forEach(kw => rows.push(["KEYWORD_BLOCK", kw, "ブロックキーワード（1行1件）"]));
+  rows.push(["MAX_ARTICLES", CONFIG.MAX_ARTICLES, "1回あたりの最大投稿件数"]);
+
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, 3).setValues(rows);
+  }
+  Logger.log(`config シートを初期化しました（${rows.length} 行）`);
+}
+
+/**
  * cleanupOldData を毎週月曜 3:00 に実行するトリガーを登録する。
  * GAS エディタから一度だけ手動で実行すること。
  */

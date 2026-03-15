@@ -36,6 +36,9 @@ function runNewsBot() {
   const startTime = new Date();
   Logger.log("START");
 
+  // config シートの設定を CONFIG に上書き（⑤）
+  loadSheetConfig();
+
   // ── 1. 収集・絞り込み ──────────────────────────────────
   const articles = collectArticles();
   const articlesCollected = articles.length;
@@ -55,14 +58,18 @@ function runNewsBot() {
   const priorityArticles = [];
   const regularArticles  = [];
 
-  newArticles.slice(0, CONFIG.MAX_ARTICLES).forEach(article => {
-    // 実行時間が上限に近づいたら打ち切り
-    if (new Date() - startTime > MAX_EXEC_MS) {
-      logWarn("実行時間上限のため AI 要約を中断", `未処理記事あり`);
-      return;
-    }
+  const targets = newArticles.slice(0, CONFIG.MAX_ARTICLES);
 
-    const summaryData = aiSummary(article);
+  // バッチ要約（A）: 1回の API 呼び出しで全記事を要約
+  if (new Date() - startTime > MAX_EXEC_MS) {
+    logWarn("実行時間上限のため AI 要約をスキップ", "記事なし投稿");
+    updateDashboard(articlesCollected, 0, 0, 0, 0);
+    return;
+  }
+  const summaries = aiBatchSummary(targets);
+
+  targets.forEach((article, i) => {
+    const summaryData      = summaries[i] || { points: [], summary: "", comment: "", trend: 0 };
     article.summary        = summaryData.summary;
     article.summary_points = summaryData.points;
     article.comment        = summaryData.comment;
@@ -81,8 +88,6 @@ function runNewsBot() {
     } else {
       regularArticles.push(article);
     }
-
-    Utilities.sleep(800);
   });
 
   const allArticles = [...priorityArticles, ...regularArticles];
