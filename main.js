@@ -1,7 +1,87 @@
+// ═══════════════════════════════════════════════════════════
+//  多 Bot 対応: Bot 別エントリーポイント
+//  各関数をトリガーに登録することで Bot ごとに独立して実行される
+// ═══════════════════════════════════════════════════════════
+
+/** 各 Bot のエントリーポイント（GAS トリガーに登録する） */
+function runAiNews()    { runBot("AI_NEWS");   }
+function runItNews()    { runBot("IT_NEWS");   }
+function runParenting() { runBot("PARENTING"); }
+function runPolitics()  { runBot("POLITICS");  }
+function runNews()      { runBot("NEWS");      }
+
+/**
+ * 指定 Bot の設定を読み込んでから runNewsBot() を実行する。
+ * runNewsBot() 本体は変更せず、CONFIG の切り替えだけで多 Bot 対応を実現。
+ */
+function runBot(botId) {
+  Logger.log(`[${botId}] Bot 起動`);
+  loadBotConfig(botId); // CURRENT_BOT_ID と CONFIG.WEBHOOK を切り替え
+  runNewsBot();         // 既存のメイン処理をそのまま実行
+}
+
+/**
+ * 全 Bot のトリガーをまとめて登録する。
+ * 既存トリガーはすべて削除してから再登録するため、一度だけ実行すればよい。
+ */
+function setupAllTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+
+  // Bot 別の実行スケジュール（同時刻でも GAS は並列実行するため問題なし）
+  const botTriggers = [
+    { fn: "runAiNews",    hour: 8 },
+    { fn: "runItNews",    hour: 8 },
+    { fn: "runParenting", hour: 8 },
+    { fn: "runPolitics",  hour: 8 },
+    { fn: "runNews",      hour: 8 },
+  ];
+  botTriggers.forEach(({ fn, hour }) => {
+    ScriptApp.newTrigger(fn)
+      .timeBased()
+      .atHour(hour)
+      .everyDays(1)
+      .inTimezone("Asia/Tokyo")
+      .create();
+    Logger.log(`トリガー登録: ${fn} @ ${hour}:00 (Asia/Tokyo)`);
+  });
+
+  // クリーンアップ（全 Bot 対象）: 毎週月曜 03:00
+  ScriptApp.newTrigger("cleanupAllBots")
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(3)
+    .create();
+  Logger.log("トリガー登録: cleanupAllBots @ 月曜 03:00");
+}
+
+/**
+ * 全 Bot の posted・logs シートの古いデータをクリーンアップする。
+ * setupAllTriggers() で毎週月曜 03:00 に自動実行するよう登録される。
+ */
+function cleanupAllBots(retentionDays = 30) {
+  Object.keys(BOTS).forEach(botId => {
+    CURRENT_BOT_ID = botId;
+    cleanupOldData(retentionDays); // 既存関数を Bot ごとに再利用
+  });
+}
+
+/**
+ * config シートのヘッダーを4カラム構成（bot_id | key | value | description）に更新する。
+ * 初回セットアップ時に一度だけ手動で実行すること。既存データ行は保持される。
+ */
+function setupAllConfigSheets() {
+  setupConfigSheet(); // db.js の関数を呼び出す
+  Logger.log("完了。config シートに各 Bot の設定を入力してください。");
+  Logger.log("フォーマット: bot_id 列に AI_NEWS / IT_NEWS / PARENTING / POLITICS / NEWS を指定");
+}
+
+// ═══════════════════════════════════════════════════════════
+//  以下は既存コード（変更なし）
+// ═══════════════════════════════════════════════════════════
+
 /**
  * 毎朝 8:00 に runNewsBot を自動実行するトリガーを登録する。
- * GAS エディタから一度だけ手動で実行すること。
- * 既存の同名トリガーは重複防止のため事前に削除する。
+ * ※ 多 Bot 対応後は setupAllTriggers() を使うこと。後方互換のため残す。
  */
 function setupDailyTrigger() {
   // 既存トリガーを削除（重複防止）
