@@ -20,11 +20,10 @@ function createDiscordThread(threadName, headerText) {
   };
 
   // ?wait=true を付けないと Discord は 204 No Content を返し channel_id が取得できない
-  const res = UrlFetchApp.fetch(CONFIG.WEBHOOK + "?wait=true", {
+  const res = fetchWithRetry(CONFIG.WEBHOOK + "?wait=true", {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
   });
 
   if (res.getResponseCode() >= 400) {
@@ -81,11 +80,10 @@ function postArticleToThread(article, threadId) {
     } catch (_) {}
   }
 
-  const res = UrlFetchApp.fetch(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
+  const res = fetchWithRetry(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({ embeds: [embed] }),
-    muteHttpExceptions: true,
   });
 
   if (res.getResponseCode() >= 400) {
@@ -109,11 +107,10 @@ function postReportToThread(stats, threadId) {
     `⏱️ 実行時間: ${stats.executionTime} 秒`,
   ];
 
-  const res = UrlFetchApp.fetch(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
+  const res = fetchWithRetry(`${CONFIG.WEBHOOK}?thread_id=${threadId}`, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({ content: lines.join("\n") }),
-    muteHttpExceptions: true,
   });
 
   if (res.getResponseCode() >= 400) {

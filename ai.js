@@ -23,14 +23,13 @@ ${article.content.slice(0,2000)}
     messages:[{role:"user", content:prompt}]
   };
 
-  const res = UrlFetchApp.fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method:"post",
-    headers:{
-      Authorization:"Bearer "+CONFIG.OPENROUTER,
-      "Content-Type":"application/json"
+  const res = fetchWithRetry("https://openrouter.ai/api/v1/chat/completions", {
+    method: "post",
+    headers: {
+      Authorization: "Bearer " + CONFIG.OPENROUTER,
+      "Content-Type": "application/json",
     },
     payload: JSON.stringify(payload),
-    muteHttpExceptions:true
   });
 
   try{
@@ -80,7 +79,7 @@ function aiBatchSummary(articles) {
     `[{"points":["要点1","要点2","要点3"],"summary":"100文字程度の要約","comment":"エンジニア視点のコメント"},...]\n\n` +
     articlesText;
 
-  const res = UrlFetchApp.fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const res = fetchWithRetry("https://openrouter.ai/api/v1/chat/completions", {
     method: "post",
     headers: {
       Authorization: "Bearer " + CONFIG.OPENROUTER,
@@ -90,7 +89,6 @@ function aiBatchSummary(articles) {
       model: "openai/gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
     }),
-    muteHttpExceptions: true,
   });
 
   try {
