@@ -1,3 +1,34 @@
+/**
+ * 毎朝 8:00 に runNewsBot を自動実行するトリガーを登録する。
+ * GAS エディタから一度だけ手動で実行すること。
+ * 既存の同名トリガーは重複防止のため事前に削除する。
+ */
+function setupDailyTrigger() {
+  // 既存トリガーを削除（重複防止）
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === "runNewsBot")
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  // 毎日 8:00〜9:00 の間に実行（GAS の時間帯トリガーは1時間幅で指定）
+  ScriptApp.newTrigger("runNewsBot")
+    .timeBased()
+    .atHour(8)
+    .everyDays(1)
+    .inTimezone("Asia/Tokyo")
+    .create();
+
+  Logger.log("トリガーを設定しました: 毎日 08:00 (Asia/Tokyo)");
+}
+
+/**
+ * 登録済みトリガーを確認する（デバッグ用）
+ */
+function listTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    Logger.log(`関数: ${t.getHandlerFunction()} / 種別: ${t.getEventType()} / ID: ${t.getUniqueId()}`);
+  });
+}
+
 function runNewsBot() {
   const startTime = new Date();
   Logger.log("START");
