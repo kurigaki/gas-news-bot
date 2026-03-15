@@ -33,6 +33,54 @@ function markAsPosted(article) {
   sheet.appendRow([article.url, article.title, new Date()]);
 }
 
+/**
+ * posted・logs シートの古い行を削除する定期メンテナンス関数。
+ * setupCleanupTrigger() で週1回（毎週月曜 3:00）自動実行するよう登録する。
+ *
+ * @param {number} retentionDays 保持日数（デフォルト 30 日）
+ */
+function cleanupOldData(retentionDays = 30) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+
+  [
+    { name: "posted", dateCol: 3 }, // posted_at
+    { name: "logs",   dateCol: 1 }, // time
+  ].forEach(({ name, dateCol }) => {
+    const sheet = getSheet(name);
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return; // ヘッダーのみ
+
+    const dates = sheet.getRange(2, dateCol, lastRow - 1, 1).getValues();
+    // 末尾から削除することで行ずれを防ぐ
+    for (let i = dates.length - 1; i >= 0; i--) {
+      const cellDate = new Date(dates[i][0]);
+      if (cellDate < cutoff) {
+        sheet.deleteRow(i + 2); // +2 = ヘッダー行 + 0-index 補正
+      }
+    }
+    logInfo(`クリーンアップ完了: ${name}`, `${retentionDays} 日以前のデータを削除`);
+  });
+}
+
+/**
+ * cleanupOldData を毎週月曜 3:00 に実行するトリガーを登録する。
+ * GAS エディタから一度だけ手動で実行すること。
+ */
+function setupCleanupTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === "cleanupOldData")
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger("cleanupOldData")
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(3)
+    .create();
+
+  Logger.log("クリーンアップトリガーを設定しました: 毎週月曜 03:00");
+}
+
 function getSheet(name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(name);

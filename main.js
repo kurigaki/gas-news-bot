@@ -29,6 +29,9 @@ function listTriggers() {
   });
 }
 
+// GAS の実行時間上限は 6 分。5 分を超えたら新規処理を打ち切る
+const MAX_EXEC_MS = 5 * 60 * 1000;
+
 function runNewsBot() {
   const startTime = new Date();
   Logger.log("START");
@@ -53,6 +56,12 @@ function runNewsBot() {
   const regularArticles  = [];
 
   newArticles.slice(0, CONFIG.MAX_ARTICLES).forEach(article => {
+    // 実行時間が上限に近づいたら打ち切り
+    if (new Date() - startTime > MAX_EXEC_MS) {
+      logWarn("実行時間上限のため AI 要約を中断", `未処理記事あり`);
+      return;
+    }
+
     const summaryData = aiSummary(article);
     article.summary        = summaryData.summary;
     article.summary_points = summaryData.points;
