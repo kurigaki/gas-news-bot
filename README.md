@@ -67,7 +67,7 @@ const CONFIG = {
 | 関数 | 実行タイミング | 説明 |
 |---|---|---|
 | `setupConfigSheet()` | 初回のみ | config シートを現在の CONFIG 値で初期化 |
-| `setupDailyTrigger()` | 初回のみ | 毎日 08:00 (Asia/Tokyo) の自動実行トリガーを登録 |
+| `setupDailyTrigger()` | 初回のみ | 毎日 07:00 (Asia/Tokyo) の自動実行トリガーを登録 |
 | `setupCleanupTrigger()` | 初回のみ | 毎週月曜 03:00 のクリーンアップトリガーを登録 |
 
 ### 4. RSS フィード・キーワードの管理

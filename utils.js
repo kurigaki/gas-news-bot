@@ -1,4 +1,35 @@
 /**
+ * URL を正規化して重複判定に使いやすい形に変換する。
+ * - フラグメント（#以降）を除去
+ * - UTM パラメータ等のトラッキング用クエリを除去
+ * - 末尾スラッシュを除去
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function normalizeUrl(url) {
+  try {
+    const TRACKING_PARAMS = new Set([
+      "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+      "ref", "from", "via", "source", "fbclid", "gclid", "yclid",
+    ]);
+    // フラグメントを除去
+    let u = String(url).split("#")[0];
+    const [base, query] = u.split("?");
+    if (query) {
+      const kept = query.split("&").filter(p => {
+        const key = p.split("=")[0].toLowerCase();
+        return !TRACKING_PARAMS.has(key) && !key.startsWith("utm_");
+      });
+      u = kept.length > 0 ? base + "?" + kept.join("&") : base;
+    }
+    return u.replace(/\/$/, "").toLowerCase();
+  } catch (_) {
+    return String(url).toLowerCase();
+  }
+}
+
+/**
  * 指数バックオフ付きリトライで HTTP リクエストを実行する。
  *
  * - 429 (Rate Limit) の場合は Discord/OpenRouter が返す retry_after を優先して待機

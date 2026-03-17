@@ -24,11 +24,29 @@ function saveArticle(article) {
 }
 
 function removeDuplicates(list) {
+  // ① list 内の重複を先に除去（複数フィードが同じ記事を返す場合）
+  const seenUrls   = new Set();
+  const seenTitles = new Set();
+  const deduped = list.filter(a => {
+    const normUrl   = normalizeUrl(a.url);
+    const normTitle = a.title.trim().toLowerCase();
+    if (seenUrls.has(normUrl) || seenTitles.has(normTitle)) return false;
+    seenUrls.add(normUrl);
+    seenTitles.add(normTitle);
+    return true;
+  });
+
+  // ② posted シートに記録済みの URL・タイトルと照合
   const sheet = getSheet("posted");
   const lastRow = sheet.getLastRow();
-  if (lastRow === 0) return list;
-  const urls = sheet.getRange(1, 1, lastRow, 1).getValues().flat();
-  return list.filter(a => !urls.includes(a.url));
+  if (lastRow <= 1) return deduped; // ヘッダーのみ
+  const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // [url, title]
+  const postedUrls   = new Set(rows.map(r => normalizeUrl(String(r[0]))));
+  const postedTitles = new Set(rows.map(r => String(r[1]).trim().toLowerCase()));
+
+  return deduped.filter(a => {
+    return !postedUrls.has(normalizeUrl(a.url)) && !postedTitles.has(a.title.trim().toLowerCase());
+  });
 }
 
 function markAsPosted(article) {

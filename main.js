@@ -29,11 +29,11 @@ function setupAllTriggers() {
 
   // Bot 別の実行スケジュール（同時刻でも GAS は並列実行するため問題なし）
   const botTriggers = [
-    { fn: "runAiNews",    hour: 8 },
-    { fn: "runItNews",    hour: 8 },
-    { fn: "runParenting", hour: 8 },
-    { fn: "runPolitics",  hour: 8 },
-    { fn: "runNews",      hour: 8 },
+    { fn: "runAiNews",    hour: 7 },
+    { fn: "runItNews",    hour: 7 },
+    { fn: "runParenting", hour: 7 },
+    { fn: "runPolitics",  hour: 7 },
+    { fn: "runNews",      hour: 7 },
   ];
   botTriggers.forEach(({ fn, hour }) => {
     ScriptApp.newTrigger(fn)
@@ -80,7 +80,7 @@ function setupAllConfigSheets() {
 // ═══════════════════════════════════════════════════════════
 
 /**
- * 毎朝 8:00 に runNewsBot を自動実行するトリガーを登録する。
+ * 毎朝 7:00 に runNewsBot を自動実行するトリガーを登録する。
  * ※ 多 Bot 対応後は setupAllTriggers() を使うこと。後方互換のため残す。
  */
 function setupDailyTrigger() {
@@ -89,15 +89,15 @@ function setupDailyTrigger() {
     .filter(t => t.getHandlerFunction() === "runNewsBot")
     .forEach(t => ScriptApp.deleteTrigger(t));
 
-  // 毎日 8:00〜9:00 の間に実行（GAS の時間帯トリガーは1時間幅で指定）
+  // 毎日 7:00〜8:00 の間に実行（GAS の時間帯トリガーは1時間幅で指定）
   ScriptApp.newTrigger("runNewsBot")
     .timeBased()
-    .atHour(8)
+    .atHour(7)
     .everyDays(1)
     .inTimezone("Asia/Tokyo")
     .create();
 
-  Logger.log("トリガーを設定しました: 毎日 08:00 (Asia/Tokyo)");
+  Logger.log("トリガーを設定しました: 毎日 07:00 (Asia/Tokyo)");
 }
 
 /**
