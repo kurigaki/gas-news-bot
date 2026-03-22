@@ -66,7 +66,11 @@ ${article.content.slice(0,2000)}
  * @param {Object[]} articles 記事配列
  * @returns {Object[]} 各記事に対応する要約オブジェクトの配列
  */
-function aiBatchSummary(articles) {
+/**
+ * @param {Object[]} articles 記事配列
+ * @param {Date|null} deadline この時刻を過ぎたら個別フォールバックを打ち切る
+ */
+function aiBatchSummary(articles, deadline) {
   if (articles.length === 0) return [];
 
   const articlesText = articles.map((a, i) =>
@@ -88,6 +92,7 @@ function aiBatchSummary(articles) {
     payload: JSON.stringify({
       model: "openai/gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
+      max_tokens: 2048,  // Fix A: 途中切れ防止
     }),
   });
 
@@ -110,12 +115,21 @@ function aiBatchSummary(articles) {
     }));
   } catch (e) {
     logWarn("AI バッチ要約失敗、個別要約にフォールバック", e.message);
-    // フォールバック: 記事ごとに個別呼び出し
-    return articles.map(a => {
-      const result = aiSummary(a);
+
+    // Fix B: フォールバック中も残り時間を監視し、期限を超えたら残りをスキップ
+    const results = [];
+    for (const a of articles) {
+      if (deadline && new Date() >= deadline) {
+        logWarn("フォールバック中断：実行時間上限", `処理済み ${results.length}/${articles.length} 件`);
+        while (results.length < articles.length) {
+          results.push({ points: [], summary: "", comment: "", trend: 0 });
+        }
+        break;
+      }
+      results.push(aiSummary(a));
       Utilities.sleep(500);
-      return result;
-    });
+    }
+    return results;
   }
 }
 
