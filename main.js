@@ -146,7 +146,9 @@ function runNewsBot() {
     updateDashboard(articlesCollected, 0, 0, 0, 0);
     return;
   }
-  const summaries = aiBatchSummary(targets);
+  // Fix B: フォールバック個別呼び出しの打ち切り期限（残り60秒を確保）
+  const deadline = new Date(startTime.getTime() + MAX_EXEC_MS - 60 * 1000);
+  const summaries = aiBatchSummary(targets, deadline);
 
   targets.forEach((article, i) => {
     const summaryData      = summaries[i] || { points: [], summary: "", comment: "", trend: 0 };
