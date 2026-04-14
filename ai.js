@@ -19,7 +19,7 @@ ${article.content.slice(0,2000)}
 `;
 
   const payload = {
-    model:"google/gemini-2.0-flash-exp:free",
+    model:"google/gemma-3-4b-it:free",
     messages:[{role:"user", content:prompt}]
   };
 
@@ -100,7 +100,7 @@ function aiBatchSummary(articles, deadline) {
       "Content-Type": "application/json",
     },
     payload: JSON.stringify({
-      model: "google/gemini-2.0-flash-exp:free",
+      model: "google/gemma-3-4b-it:free",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 2048,  // Fix A: 途中切れ防止
     }),
