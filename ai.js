@@ -19,7 +19,7 @@ ${article.content.slice(0,2000)}
 `;
 
   const payload = {
-    model:"openai/gpt-4o-mini",
+    model:"google/gemini-2.0-flash-exp:free",
     messages:[{role:"user", content:prompt}]
   };
 
@@ -32,8 +32,18 @@ ${article.content.slice(0,2000)}
     payload: JSON.stringify(payload),
   });
 
+  const code = res.getResponseCode();
+  if (code >= 400) {
+    logWarn(`aiSummary: HTTP ${code}`, res.getContentText().slice(0, 300));
+    return {points:[], summary:"AI要約失敗(HTTP " + code + ")", comment:"", trend:0};
+  }
+
   try{
     const json = JSON.parse(res.getContentText());
+    if (!json.choices || !json.choices[0]) {
+      logWarn("aiSummary: choices が無い", res.getContentText().slice(0, 300));
+      return {points:[], summary:"AI要約失敗", comment:"", trend:0};
+    }
     const text = json.choices[0].message.content;
 
     const pointsMatch = text.match(/【要点】\s*([\s\S]*?)\s*(?=【要約】)/);
@@ -90,14 +100,27 @@ function aiBatchSummary(articles, deadline) {
       "Content-Type": "application/json",
     },
     payload: JSON.stringify({
-      model: "openai/gpt-4o-mini",
+      model: "google/gemini-2.0-flash-exp:free",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 2048,  // Fix A: 途中切れ防止
     }),
   });
 
+  const code = res.getResponseCode();
+  // 402 等のクレジット/権限系エラーは個別呼び出ししても無駄なので即空配列を返す
+  if (code === 402 || code === 401 || code === 403) {
+    logWarn(`aiBatchSummary: HTTP ${code} - AI要約をスキップ`, res.getContentText().slice(0, 300));
+    return articles.map(() => ({ points: [], summary: `AI要約失敗(HTTP ${code})`, comment: "", trend: 0 }));
+  }
+  if (code >= 400) {
+    logWarn(`aiBatchSummary: HTTP ${code}`, res.getContentText().slice(0, 300));
+  }
+
   try {
     const json = JSON.parse(res.getContentText());
+    if (!json.choices || !json.choices[0]) {
+      throw new Error("choices が無い: " + res.getContentText().slice(0, 200));
+    }
     const text = json.choices[0].message.content.trim();
 
     // JSON 配列部分だけ抽出（前後に余分なテキストがある場合に対応）
