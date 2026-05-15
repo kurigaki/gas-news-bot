@@ -201,6 +201,10 @@ function runNewsBot() {
   });
 
   // ── 5. レポート投稿 ───────────────────────────────────
+  // Cloudflare 1015 対策: 連投直後に short-burst カウンタが上限近くにあるため
+  // レポート投稿の前にクールダウンを入れる
+  Utilities.sleep(5000);
+
   const executionTime = ((new Date() - startTime) / 1000).toFixed(1);
   postReportToThread({
     collected:     articlesCollected,

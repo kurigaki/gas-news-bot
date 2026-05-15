@@ -32,9 +32,14 @@ function normalizeUrl(url) {
 /**
  * 指数バックオフ付きリトライで HTTP リクエストを実行する。
  *
- * - 429 (Rate Limit) の場合は Discord/OpenRouter が返す retry_after を優先して待機
- * - 5xx サーバーエラーの場合は指数バックオフ（initialDelayMs × 2^試行回数）で再試行
- * - 4xx（429 以外）はリトライしない（リクエスト自体が不正なため）
+ * - 429 の場合は以下の優先順で待機時間を決定:
+ *   1. レスポンスヘッダー Retry-After / X-RateLimit-Reset-After
+ *   2. ボディ JSON の retry_after（Discord アプリケーションレート用）
+ *   3. 指数バックオフ
+ * - Cloudflare の "error code: 1015"（webhook 累積レート）は body が JSON ではなく
+ *   待機要求も長め（数十秒〜数分）になるため、最低 30 秒の待機を強制する。
+ * - 5xx サーバーエラーは指数バックオフで再試行。
+ * - 4xx（429 以外）はリトライしない。
  *
  * @param {string}   url        リクエスト先 URL
  * @param {Object}   options    UrlFetchApp.fetch に渡すオプション
@@ -43,6 +48,10 @@ function normalizeUrl(url) {
  * @returns {HTTPResponse}
  */
 function fetchWithRetry(url, options, maxRetries = 3, initialDelayMs = 1000) {
+  // GAS の UrlFetchApp は 1 リクエストあたり最大 60 秒スリープが現実的な上限
+  const MAX_WAIT_MS = 60 * 1000;
+  const CLOUDFLARE_1015_MIN_WAIT_MS = 30 * 1000;
+
   let lastRes;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     lastRes = UrlFetchApp.fetch(url, Object.assign({ muteHttpExceptions: true }, options));
@@ -58,17 +67,55 @@ function fetchWithRetry(url, options, maxRetries = 3, initialDelayMs = 1000) {
 
     if (attempt === maxRetries) break; // リトライ上限
 
-    // 待機時間を決定
+    // 待機時間を決定（指数バックオフをデフォルトに）
     let waitMs = initialDelayMs * Math.pow(2, attempt);
+    let waitSource = "backoff";
+
     if (code === 429) {
-      try {
-        const body = JSON.parse(lastRes.getContentText());
-        const retryAfter = body.retry_after || body["X-RateLimit-Reset-After"];
-        if (retryAfter) waitMs = Math.ceil(parseFloat(retryAfter) * 1000) + 200;
-      } catch (_) {}
+      // ① レスポンスヘッダー Retry-After / X-RateLimit-Reset-After を最優先
+      const headers = lastRes.getHeaders() || {};
+      const headerRetry =
+        headers["Retry-After"] || headers["retry-after"] ||
+        headers["X-RateLimit-Reset-After"] || headers["x-ratelimit-reset-after"];
+      if (headerRetry) {
+        const sec = parseFloat(headerRetry);
+        if (!isNaN(sec) && sec > 0) {
+          waitMs = Math.ceil(sec * 1000) + 200;
+          waitSource = "header";
+        }
+      }
+
+      // ② ヘッダーで取れなければボディ JSON を見る（Discord application rate-limit）
+      if (waitSource === "backoff") {
+        const text = lastRes.getContentText() || "";
+        try {
+          const body = JSON.parse(text);
+          const bodyRetry = body.retry_after;
+          if (bodyRetry) {
+            waitMs = Math.ceil(parseFloat(bodyRetry) * 1000) + 200;
+            waitSource = "body";
+          }
+        } catch (_) {
+          // Cloudflare 1015 など、body が JSON ではないケース
+          if (text.indexOf("1015") !== -1 || /cloudflare/i.test(text)) {
+            waitMs = Math.max(waitMs, CLOUDFLARE_1015_MIN_WAIT_MS);
+            waitSource = "cloudflare-1015";
+          }
+        }
+      }
+
+      // ③ Cloudflare 1015 のときは最低 30 秒待機を強制
+      const text = lastRes.getContentText() || "";
+      if (text.indexOf("1015") !== -1) {
+        waitMs = Math.max(waitMs, CLOUDFLARE_1015_MIN_WAIT_MS);
+        if (waitSource === "backoff") waitSource = "cloudflare-1015";
+      }
     }
 
-    logWarn(`HTTP ${code} - ${waitMs}ms 後にリトライ (${attempt + 1}/${maxRetries})`, url);
+    // GAS の制約と CF 過剰待機回避のため上限でクリップ
+    if (waitMs > MAX_WAIT_MS) waitMs = MAX_WAIT_MS;
+
+    logWarn(`HTTP ${code} - ${waitMs}ms 後にリトライ (${attempt + 1}/${maxRetries}) [${waitSource}]`, url);
     Utilities.sleep(waitMs);
   }
   return lastRes;
